@@ -185,6 +185,7 @@
   .branch.collapsed{height:auto !important}
   .branch.collapsed .branch-quote,.branch.collapsed .branch-body,.branch.collapsed .branch-compose{display:none}
   .branch.expanded{height:min(520px,calc(100vh - 156px));min-height:260px}
+  .branch.reader{position:fixed;left:auto;right:var(--drawer-gap);top:72px !important;bottom:24px;width:min(760px,calc(100vw - var(--drawer-gap) - var(--drawer-gap)));height:auto !important;max-height:none}
   .branch-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--rule);cursor:pointer;background:var(--surface);position:relative}
   .branch.collapsed .branch-head{border-bottom:none}
   .branch-head .ico{width:22px;height:22px;border-radius:5px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:13px;flex-shrink:0}
@@ -197,15 +198,20 @@
   .branch:hover .branch-head .actions,.branch:focus-within .branch-head .actions{opacity:1;pointer-events:auto}
   .branch-head .actions button{width:24px;height:24px;border-radius:5px;color:var(--text-3);display:grid;place-items:center;font-size:14px}
   .branch-head .actions button:hover{background:var(--bg-3);color:var(--text)}
+  .branch-head .actions button.on{background:var(--bg-3);color:var(--text)}
   .branch.collapsed [data-h="collapse"] i{transform:rotate(180deg)}
   .branch-quote{margin:10px 12px 4px;padding:8px 12px;background:var(--bg-2);border-left:2px solid var(--accent);border-radius:0 6px 6px 0;font-size:12.5px;color:var(--text-2);line-height:1.5;font-style:italic}
+  .branch.reader .branch-quote{font-size:13.5px}
   .branch-quote .lab{font-family:var(--mono);font-style:normal;font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px;display:block}
   .branch-body{flex:1;min-height:0;overflow-y:auto;padding:10px 14px 4px;display:flex;flex-direction:column;gap:14px}
   .branch-body .msg.user .bub{max-width:80%;font-size:13.5px;padding:8px 12px}
   .branch-body .msg.ai{font-size:14px;line-height:1.65}
+  .branch.reader .branch-body{padding:14px 18px 6px}
+  .branch.reader .branch-body .msg.ai{font-size:15px;line-height:1.75}
   .branch-compose{padding:8px 10px 10px;border-top:1px solid var(--rule);background:var(--surface)}
   .branch-compose .composer{box-shadow:none;border:1px solid var(--rule-2);background:var(--bg-2);padding:8px 10px}
   .branch-compose textarea{font-size:13.5px;min-height:20px;max-height:120px}
+  .branch.reader .branch-compose textarea{max-height:180px}
   .branch-compose .send-btn{width:26px;height:26px;font-size:13px}
   .branch-compose .chip{font-size:11px;padding:4px 6px}
 
@@ -1593,7 +1599,7 @@
 
   // ---------- branch panels ----------
   const stack = $('#branch-stack');
-  const branches = {}; // id -> {el, parentBid, anchorBid, quote, depth, collapsed}
+  const branches = {}; // id -> {el, parentBid, anchorBid, quote, depth, collapsed, reader}
   let activeBranchId = null;
   let branchLayoutRaf = 0;
   const ctxPanel = $('#ctx-panel'); // hoisted so rebalance() can reference it
@@ -1656,6 +1662,7 @@
         <div class="ico logo-ico"><svg aria-hidden="true"><use href="#logo-mark"/></svg></div>
         <div class="title"><span class="depth">↳ ${depth}</span><span class="ttl">${esc(titleFromQuote(quote))}</span><span class="branch-usage"></span></div>
         <div class="actions">
+          <button data-h="reader" title="Expand branch" aria-label="Expand branch"><i class="ti ti-arrows-maximize"></i></button>
           <button data-h="collapse" title="Collapse/expand"><i class="ti ti-chevron-up"></i></button>
           <button data-h="menu" title="Branch actions"><i class="ti ti-dots"></i></button>
           <button data-h="close" title="Close branch"><i class="ti ti-x"></i></button>
@@ -1681,13 +1688,14 @@
       </div>
     `;
     stack.appendChild(el);
-    branches[id] = { el, parentBid: parentBranchId, anchorBid: anchorBid || id, quote, depth, collapsed, messages: [] };
+    branches[id] = { el, parentBid: parentBranchId, anchorBid: anchorBid || id, quote, depth, collapsed, reader:false, messages: [] };
     activeBranchId = id;
     // animate in
     requestAnimationFrame(() => el.classList.remove('entering'));
     rebalance();
 
     // header actions
+    el.querySelector('[data-h="reader"]').addEventListener('click', () => toggleReader(id));
     el.querySelector('[data-h="collapse"]').addEventListener('click', () => toggleCollapse(id));
     el.querySelector('[data-h="menu"]').addEventListener('click', (e) => openMenu(e.currentTarget, id));
     el.querySelector('[data-h="close"]').addEventListener('click', () => closeBranch(id));
@@ -1760,6 +1768,41 @@
     });
   }
 
+  function syncReaderButton(b){
+    const btn = b?.el?.querySelector('[data-h="reader"]');
+    if (!btn) return;
+    const expanded = !!b.reader;
+    const label = expanded ? 'Shrink branch' : 'Expand branch';
+    btn.classList.toggle('on', expanded);
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.innerHTML = `<i class="ti ${expanded ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}"></i>`;
+  }
+
+  function setBranchExpanded(b){
+    b.collapsed = false;
+    b.el.classList.remove('collapsed');
+    b.el.classList.add('expanded');
+  }
+
+  function toggleReader(id){
+    const b = branches[id]; if (!b) return;
+    const next = !b.reader;
+    Object.keys(branches).forEach(otherId => {
+      const other = branches[otherId];
+      if (!other.reader) return;
+      other.reader = false;
+      other.el.classList.remove('reader');
+      syncReaderButton(other);
+    });
+    b.reader = next;
+    b.el.classList.toggle('reader', next);
+    setBranchExpanded(b);
+    syncReaderButton(b);
+    activeBranchId = id;
+    rebalance();
+  }
+
   function toggleCollapse(id){
     const b = branches[id]; if (!b) return;
     const expanding = b.collapsed;
@@ -1775,6 +1818,11 @@
     b.collapsed = !b.collapsed;
     b.el.classList.toggle('collapsed', b.collapsed);
     b.el.classList.toggle('expanded', !b.collapsed);
+    if (b.collapsed && b.reader){
+      b.reader = false;
+      b.el.classList.remove('reader');
+      syncReaderButton(b);
+    }
     rebalance();
   }
   function closeBranch(id){
@@ -1794,7 +1842,7 @@
     const ids = Object.keys(branches);
     ids.forEach(id => {
       const el = branches[id].el;
-      el.style.zIndex = id === activeBranchId ? '2' : '1';
+      el.style.zIndex = branches[id].reader ? '60' : id === activeBranchId ? '2' : '1';
     });
     stack.classList.toggle('has-active', ids.length > 0);
     scheduleBranchLayout();
@@ -1844,7 +1892,11 @@
     if (!ids.length) return;
 
     const rail = branchRail();
-    const placements = ids.map((id, index) => {
+    ids.forEach(id => {
+      if (branches[id].reader) branches[id].el.classList.remove('source-out');
+    });
+
+    const placements = ids.filter(id => !branches[id].reader).map((id, index) => {
       const b = branches[id];
       const anchor = branchAnchorEl(b);
       const anchorRect = anchor?.getBoundingClientRect();
