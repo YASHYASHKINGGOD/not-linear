@@ -1673,7 +1673,7 @@
           <div class="compose-row">
             <div class="left">
               <button class="chip branch-attach-btn" data-branch="${id}" title="Add files or folder"><i class="ti ti-plus"></i></button>
-              <button class="chip"><i class="ti ti-sparkles"></i> Sonnet 4.6</button>
+              <button class="chip branch-model-chip">${apiKeys.deepseek ? '<i class="ti ti-sparkles"></i> DeepSeek' : `<i class="ti ti-sparkles"></i> ${prefs.model === 'haiku' ? 'Haiku 4.5' : 'Sonnet 4.6'}`}</button>
             </div>
             <button class="send-btn" disabled><i class="ti ti-arrow-up"></i></button>
           </div>
