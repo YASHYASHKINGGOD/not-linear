@@ -291,9 +291,13 @@
   .menu.show{display:block}
   .menu button{width:100%;padding:7px 10px;border-radius:5px;font-size:13px;color:var(--text);text-align:left;display:flex;align-items:center;gap:9px}
   .menu button:hover{background:var(--bg-3)}
+  .menu button.on{background:var(--accent-soft);color:var(--text)}
   .menu button .ti{font-size:14px;color:var(--text-2);width:16px}
+  .menu button.on .ti{color:var(--accent)}
   .menu button .desc{display:block;font-size:11.5px;color:var(--text-3);margin-top:1px}
   .menu .div{height:1px;background:var(--rule);margin:3px 0}
+  .model-check{display:none;margin-left:auto}
+  .menu button.on .model-check{display:block}
 
   /* Inline error */
   .err-msg{color:#f87171;font-size:13px;display:flex;align-items:center;gap:6px;line-height:1.5;padding:2px 0}
@@ -441,7 +445,7 @@
       <div class="left">
         <button class="chip" id="main-attach-btn" title="Add files or folder"><i class="ti ti-plus"></i></button>
         <button class="chip" title="Tools"><i class="ti ti-tool"></i></button>
-        <button class="chip"><i class="ti ti-sparkles"></i> Sonnet 4.5 <i class="ti ti-chevron-down" style="font-size:11px"></i></button>
+        <button class="chip model-chip" id="main-model-btn" title="Select model" aria-haspopup="menu" aria-expanded="false"><i class="ti ti-sparkles"></i><span class="model-label">Sonnet 4.6</span><i class="ti ti-chevron-down" style="font-size:11px"></i></button>
       </div>
       <button class="send-btn" id="main-send" disabled><i class="ti ti-arrow-up"></i></button>
     </div>
@@ -456,6 +460,20 @@
 <div class="menu" id="attach-menu" style="min-width:160px">
   <button data-act="files"><i class="ti ti-file-plus"></i><span>Add files</span></button>
   <button data-act="folder"><i class="ti ti-folder-plus"></i><span>Add folder</span></button>
+</div>
+
+<!-- model picker -->
+<div class="menu" id="model-menu" role="menu" aria-label="Select model" style="min-width:190px">
+  <button data-model="sonnet" role="menuitem">
+    <i class="ti ti-sparkles"></i>
+    <span>Sonnet 4.6<span class="desc">Best quality</span></span>
+    <i class="ti ti-check model-check"></i>
+  </button>
+  <button data-model="haiku" role="menuitem">
+    <i class="ti ti-bolt"></i>
+    <span>Haiku 4.5<span class="desc">Cheap and fast</span></span>
+    <i class="ti ti-check model-check"></i>
+  </button>
 </div>
 
 <!-- Selection popover -->
@@ -1209,6 +1227,83 @@
   const docEl = $('#doc');
   const mainEl = $('.main');
   const composerWrap = $('#composer-wrap');
+  const mainModelBtn = $('#main-model-btn');
+  const modelMenu = $('#model-menu');
+  const MODEL_OPTIONS = {
+    sonnet: { label:'Sonnet 4.6' },
+    haiku: { label:'Haiku 4.5' },
+  };
+
+  function modelLabel(value = prefs.model){
+    return (MODEL_OPTIONS[value] || MODEL_OPTIONS.sonnet).label;
+  }
+
+  function modelChipContents({ chevron = true } = {}){
+    return `<i class="ti ti-sparkles"></i><span class="model-label">${esc(modelLabel())}</span>${chevron ? '<i class="ti ti-chevron-down" style="font-size:11px"></i>' : ''}`;
+  }
+
+  function branchModelChipContents(){
+    if (apiKeys.deepseek) return '<i class="ti ti-sparkles"></i><span class="model-label">DeepSeek</span>';
+    return modelChipContents();
+  }
+
+  function renderModelUI(){
+    const mainLabel = mainModelBtn?.querySelector('.model-label');
+    if (mainLabel) mainLabel.textContent = modelLabel();
+    if (modelMenu){
+      $$('[data-model]', modelMenu).forEach(btn => btn.classList.toggle('on', btn.dataset.model === prefs.model));
+    }
+    $$('.branch-model-chip').forEach(btn => {
+      btn.innerHTML = branchModelChipContents();
+      btn.title = apiKeys.deepseek ? 'Branches use DeepSeek when connected' : 'Select model';
+      btn.setAttribute('aria-haspopup', apiKeys.deepseek ? 'false' : 'menu');
+    });
+  }
+
+  function setModelPreference(value, options = {}){
+    if (!MODEL_OPTIONS[value]) return;
+    prefs.model = value;
+    markSegValue(value);
+    renderModelUI();
+    persistPrefs();
+    if (options.toast) toast(`Model set to ${modelLabel(value)}`);
+  }
+
+  function openModelMenu(anchor){
+    if (!modelMenu || !anchor) return;
+    if (modelMenu.classList.contains('show')){
+      closeModelMenu();
+      return;
+    }
+    if (typeof closeMenu === 'function') closeMenu();
+    if (attachMenu?.classList.contains('show')) attachMenu.classList.remove('show');
+    modelMenu.classList.add('show');
+    renderModelUI();
+    const r = anchor.getBoundingClientRect();
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - modelMenu.offsetWidth - 8);
+    let top = r.top - modelMenu.offsetHeight - 6;
+    if (top < 8) top = r.bottom + 6;
+    modelMenu.style.left = left + 'px';
+    modelMenu.style.top = top + 'px';
+    mainModelBtn?.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeModelMenu(){
+    modelMenu?.classList.remove('show');
+    mainModelBtn?.setAttribute('aria-expanded', 'false');
+  }
+
+  mainModelBtn?.addEventListener('click', e => openModelMenu(e.currentTarget));
+  document.addEventListener('mousedown', e => {
+    if (modelMenu?.classList.contains('show') && !modelMenu.contains(e.target) && !e.target.closest('.model-chip,.branch-model-chip')) closeModelMenu();
+  });
+  modelMenu?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-model]');
+    if (!btn) return;
+    setModelPreference(btn.dataset.model, { toast:true });
+    closeModelMenu();
+  });
+
   const defaultThreadState = {
     h1: $('#doc h1').innerHTML,
     eyebrow: $('#doc .eyebrow').textContent,
@@ -1680,7 +1775,7 @@
           <div class="compose-row">
             <div class="left">
               <button class="chip branch-attach-btn" data-branch="${id}" title="Add files or folder"><i class="ti ti-plus"></i></button>
-              <button class="chip branch-model-chip">${apiKeys.deepseek ? '<i class="ti ti-sparkles"></i> DeepSeek' : `<i class="ti ti-sparkles"></i> ${prefs.model === 'haiku' ? 'Haiku 4.5' : 'Sonnet 4.6'}`}</button>
+              <button class="chip branch-model-chip" title="${apiKeys.deepseek ? 'Branches use DeepSeek when connected' : 'Select model'}" aria-haspopup="${apiKeys.deepseek ? 'false' : 'menu'}">${branchModelChipContents()}</button>
             </div>
             <button class="send-btn" disabled><i class="ti ti-arrow-up"></i></button>
           </div>
@@ -1712,6 +1807,10 @@
     ta.addEventListener('keydown', e => { if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendBranchMsg(id); } });
     sb.addEventListener('click', () => sendBranchMsg(id));
     el.querySelector('.branch-attach-btn').addEventListener('click', e => openAttachMenu(e.currentTarget, id));
+    el.querySelector('.branch-model-chip')?.addEventListener('click', e => {
+      if (apiKeys.deepseek){ toast('Branches are using DeepSeek'); return; }
+      openModelMenu(e.currentTarget);
+    });
 
     setTimeout(() => ta.focus(), 280);
     updateComposerOffset();
@@ -2075,6 +2174,7 @@
     $('#searxng-url').value = prefs.searxngUrl || '';
     markSegValue(prefs.tone || 'concise');
     markSegValue(prefs.model || 'sonnet');
+    renderModelUI();
     renderUserNameUI();
   }
   $('#open-prefs').addEventListener('click', openPrefs);
@@ -2087,9 +2187,12 @@
     $$('.seg button', sect).forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     const v = b.dataset.v;
-    if (['concise','friendly','formal','technical','socratic'].includes(v)) prefs.tone = v;
-    else if (['sonnet','haiku'].includes(v)) prefs.model = v;
-    persistPrefs();
+    if (['concise','friendly','formal','technical','socratic'].includes(v)){
+      prefs.tone = v;
+      persistPrefs();
+    } else if (['sonnet','haiku'].includes(v)){
+      setModelPreference(v);
+    }
   }));
   $('#pref-folder').addEventListener('input', e => { prefs.folderName = e.target.value || 'Workspace'; renderCrumbs(); renderCtxPanel(); persistPrefs(); });
   $('#pref-name').addEventListener('input', e => { prefs.name = e.target.value; renderUserNameUI(); persistPrefs(); });
