@@ -2642,6 +2642,7 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape'){
       if (sidebar.classList.contains('open')){ setSidebar(false); return; }
+      if (modelMenu?.classList.contains('show')){ closeModelMenu(); return; }
       if (menu.classList.contains('show')){ closeMenu(); return; }
       if (ctxPanel.classList.contains('show')){ closeCtx(); return; }
       if (prefsEl.classList.contains('show')){ closePrefs(); return; }
@@ -2662,6 +2663,7 @@
 
   // ---------- init ----------
   loadPersistedState();              // merge saved state into threadState
+  renderModelUI();
   renderThread(currentThreadId, true); // render without overwriting with empty DOM
   renderCtxPanel();
   setTimeout(() => {
